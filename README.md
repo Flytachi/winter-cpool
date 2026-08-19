@@ -174,12 +174,21 @@ find the code path that borrows without returning.
 
 ## Contributing
 
+Internal technical notes — the connection state machine, what each policy knob changes, and
+the reasoning behind decisions that are not obvious from the code — live in
+[`docs/`](docs/README.md). Read those before changing how a connection is borrowed or retired.
+
 ```bash
-composer test        # phpunit
-composer test-detail # phpunit --testdox
-composer cs-check    # phpcs
-composer cs-fix      # phpcbf
+XDEBUG_MODE=off composer test   # phpunit (see CONTRIBUTING for why the env var)
+composer test-detail            # phpunit --testdox
+composer cs-check               # phpcs
+composer cs-fix                 # phpcbf
 ```
+
+- Setup, checks and the testing philosophy: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Changes and upgrade notes: [CHANGELOG.md](CHANGELOG.md)
+- Reporting a vulnerability, and what the pool does and does not guarantee:
+  [SECURITY.md](SECURITY.md)
 
 ---
 
