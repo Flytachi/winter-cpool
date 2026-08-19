@@ -4,6 +4,8 @@
 [![PHP Version Require](https://img.shields.io/packagist/php-v/flytachi/winter-cpool.svg?style=flat-square)](https://packagist.org/packages/flytachi/winter-cpool)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
+📖 **[Documentation](https://winterframe.net/packages/cpool)** · [Quick start](https://winterframe.net/packages/cpool/quickstart) · [API reference](https://winterframe.net/packages/cpool/api-reference)
+
 A connection pool that knows nothing about connections.
 
 The pool handles borrowing, returning, capacity, lifetime and liveness; **what** is being
@@ -169,6 +171,34 @@ $pool->stats();   // ['total' => 2, 'idle' => 2, 'active' => 0, 'maximum' => 10]
 
 `active` climbing to `maximum` while borrowers wait is the signal to raise the ceiling — or to
 find the code path that borrows without returning.
+
+---
+
+## Documentation
+
+The user-facing documentation lives at **[winterframe.net/packages/cpool](https://winterframe.net/packages/cpool)**
+(the link picks your language; RU and EN are both complete).
+
+**Start here**
+
+| Page | What it answers |
+|------|-----------------|
+| [Introduction](https://winterframe.net/packages/cpool/intro) | Why a pool exists, and what this one deliberately does not do |
+| [Installation](https://winterframe.net/packages/cpool/installation) | Requirements, and what changes with and without `ext-swoole` |
+| [Quick start](https://winterframe.net/packages/cpool/quickstart) | Adapter, pool, borrow and release — a working example |
+
+**Guides**
+
+| Page | What it answers |
+|------|-----------------|
+| [Writing an adapter](https://winterframe.net/packages/cpool/writing-an-adapter) | The three methods, what `validate()` should probe, what an adapter must never do |
+
+**Reference**
+
+| Page | What it answers |
+|------|-----------------|
+| [API reference](https://winterframe.net/packages/cpool/api-reference) | Every type, method and exception |
+| [Policy](https://winterframe.net/packages/cpool/policy) | Each knob, what it changes and how to pick a value |
 
 ---
 

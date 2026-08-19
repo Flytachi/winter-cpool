@@ -7,6 +7,8 @@ namespace Flytachi\Winter\CPool;
 /**
  * A pooled connection plus its lifecycle metadata. `lastUsedAt` (mutable) drives
  * the idle-gated liveness probe; `expiresAt` drives maxLifetime rotation.
+ *
+ * @link https://winterframe.net/packages/cpool/api-reference#poolentry-final-class PoolEntry reference
  */
 final class PoolEntry
 {

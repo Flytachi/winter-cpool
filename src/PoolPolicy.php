@@ -14,6 +14,8 @@ namespace Flytachi\Winter\CPool;
  * $policy = new PoolPolicy(maximumPoolSize: 20, maxLifetime: 600);
  * $policy = PoolPolicy::default();
  * ```
+ *
+ * @link https://winterframe.net/packages/cpool/policy Policy: every knob and how to pick values
  */
 final readonly class PoolPolicy
 {

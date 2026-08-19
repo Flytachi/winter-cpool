@@ -28,6 +28,8 @@ use Throwable;
  * Unlike {@see ConnectionPool} this needs no coroutine — it never touches a Channel —
  * so it is safe under FPM/CLI. It is not coroutine-safe for concurrent callers; use
  * {@see ConnectionPool} when connections are shared across coroutines.
+ *
+ * @link https://winterframe.net/packages/cpool/api-reference#singleconnection-final-class SingleConnection reference
  */
 final class SingleConnection
 {

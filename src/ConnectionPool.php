@@ -29,6 +29,8 @@ use Throwable;
  * / close), so the same pool serves DB (CDO) and Redis alike.
  *
  * Must run inside a Swoole coroutine (it uses a coroutine Channel).
+ *
+ * @link https://winterframe.net/packages/cpool/api-reference#connectionpool-final-class ConnectionPool reference
  */
 final class ConnectionPool
 {

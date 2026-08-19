@@ -10,6 +10,8 @@ use Throwable;
 /**
  * Thrown when the pool cannot hand out a usable connection — exhaustion within
  * {@see PoolPolicy::$connectionTimeout}, a failed open, or repeated dead borrows.
+ *
+ * @link https://winterframe.net/packages/cpool/api-reference#poolexception-final-class PoolException reference
  */
 final class PoolException extends RuntimeException
 {

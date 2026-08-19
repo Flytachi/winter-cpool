@@ -10,6 +10,8 @@ namespace Flytachi\Winter\CPool;
  * The pool is driver-agnostic — it knows nothing about PDO/Redis/etc.; an adapter
  * supplies the three operations. A DB adapter opens a CDO and probes with `SELECT
  * 1`; a Redis adapter opens a `\Redis` and probes with `PING`.
+ *
+ * @link https://winterframe.net/packages/cpool/writing-an-adapter Writing an adapter: the three methods
  */
 interface ConnectionFactory
 {
