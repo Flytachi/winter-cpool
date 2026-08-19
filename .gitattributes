@@ -1,0 +1,9 @@
+# .gitattributes
+/docs           export-ignore
+/tests          export-ignore
+.gitignore      export-ignore
+.gitattributes  export-ignore
+phpcs.xml       export-ignore
+phpunit.xml     export-ignore
+CONTRIBUTING.md export-ignore
+SECURITY.md     export-ignore
