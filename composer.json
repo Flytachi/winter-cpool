@@ -1,6 +1,6 @@
 {
     "name": "flytachi/winter-cpool",
-    "description": "",
+    "description": "Driver-agnostic connection pool for PHP — coroutine-safe under Swoole, single-connection fallback everywhere else.",
     "type": "library",
     "license": "MIT",
     "scripts": {
@@ -23,8 +23,12 @@
         "php": ">=8.4"
     },
     "require-dev": {
+        "swoole/ide-helper": "^6.0",
         "phpunit/phpunit": "@stable",
         "squizlabs/php_codesniffer": "@stable"
+    },
+    "suggest": {
+        "ext-swoole": "Required for coroutine-safe pooling; without it the pool degrades to a single shared connection"
     },
     "homepage": "https://winterframe.net",
     "support": {
@@ -32,7 +36,14 @@
         "source": "https://github.com/flytachi/winter-cpool",
         "docs": "https://winterframe.net/packages/cpool"
     },
-    "keywords": [],
+    "keywords": [
+        "connection-pool",
+        "pool",
+        "swoole",
+        "coroutine",
+        "php",
+        "winter"
+    ],
     "authors": [
         {
             "name": "Flytachi",
