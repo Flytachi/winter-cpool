@@ -146,6 +146,49 @@ final class HousekeeperTest extends TestCase
         self::assertSame(2, $out['stats']['total']);
     }
 
+    public function test_a_sweep_keeps_the_idle_channel_borrowable(): void
+    {
+        $f = new MockFactory();
+        $time = 1000.0;
+        $out = [];
+        \Swoole\Coroutine\run(function () use ($f, &$time, &$out): void {
+            $pool = new ConnectionPool(
+                $f,
+                new PoolPolicy(maximumPoolSize: 3, keepaliveTime: 10.0),
+                static function () use (&$time): float {
+                    return $time;
+                },
+            );
+
+            $held = [];
+            for ($i = 0; $i < 3; ++$i) {
+                $held[] = $pool->borrow();
+            }
+            foreach ($held as $entry) {
+                $pool->release($entry);
+            }
+            $time = 1011.0;   // every connection is now due a keepalive probe
+
+            // What a borrower arriving mid-probe would find waiting for it.
+            $seen = [];
+            $f->whileProbing = static function () use ($pool, &$seen): void {
+                $seen[] = $pool->stats()['idle'];
+            };
+
+            self::maintain($pool);
+
+            $out = ['seen' => $seen, 'idle' => $pool->stats()['idle']];
+            $pool->close();
+        });
+
+        self::assertSame(
+            [2, 2, 2],
+            $out['seen'],
+            'only the connection being probed is out of the channel — the rest stay borrowable',
+        );
+        self::assertSame(3, $out['idle'], 'and all three are back when the sweep ends');
+    }
+
     public function test_maintain_retires_expired_connection(): void
     {
         $f = new MockFactory();

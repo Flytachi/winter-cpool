@@ -33,6 +33,7 @@ final class ConnectionPoolTest extends TestCase
             $pool = new ConnectionPool($f);
             $e = $pool->borrow();
             $out = ['isEntry' => $e instanceof PoolEntry, 'created' => $f->created, 'validated' => $f->validated];
+            $pool->close();
         });
 
         self::assertTrue($out['isEntry']);
@@ -50,6 +51,7 @@ final class ConnectionPoolTest extends TestCase
             $pool->release($a);
             $b = $pool->borrow();   // immediate → idle < window → no probe
             $out = ['same' => $a === $b, 'created' => $f->created, 'validated' => $f->validated];
+            $pool->close();
         });
 
         self::assertTrue($out['same'], 'idle connection is reused');
@@ -71,6 +73,7 @@ final class ConnectionPoolTest extends TestCase
             $time = 1002.0;          // idle 2s > 0.5 window
             $b = $pool->borrow();    // → probe (alive) → reuse
             $out = ['same' => $a === $b, 'validated' => $f->validated, 'created' => $f->created];
+            $pool->close();
         });
 
         self::assertTrue($out['same']);
@@ -93,6 +96,7 @@ final class ConnectionPoolTest extends TestCase
             $f->alive = false;       // the pooled connection has died
             $b = $pool->borrow();    // probe fails → retire $a → open fresh
             $out = ['same' => $a === $b, 'created' => $f->created, 'closed' => $f->closed];
+            $pool->close();
         });
 
         self::assertFalse($out['same'], 'a fresh connection replaces the dead one');
@@ -118,6 +122,7 @@ final class ConnectionPoolTest extends TestCase
             $time = 1011.0;          // past maxLifetime
             $b = $pool->borrow();    // expired → retire → fresh
             $out = ['same' => $a === $b, 'created' => $f->created];
+            $pool->close();
         });
 
         self::assertFalse($out['same']);
@@ -157,6 +162,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException $e) {
                 $out = ['ok' => false, 'message' => $e->getMessage()];
             }
+            $pool->close();
         });
 
         self::assertTrue($out['ok'], $out['message'] ?? '');
@@ -179,6 +185,7 @@ final class ConnectionPoolTest extends TestCase
                 $caught = true;
             }
             $created = $f->created;
+            $pool->close();
         });
 
         self::assertTrue($caught, 'a full pool fails fast after connectionTimeout');
@@ -210,6 +217,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException) {
             }
             $out['afterSecond'] = $f->created;
+            $pool->close();
         });
 
         self::assertSame(1, $out['afterFirst'], 'one socket is opened, then creation is penalised');
@@ -238,6 +246,7 @@ final class ConnectionPoolTest extends TestCase
 
             $entry = $pool->borrow();
             $out = ['isEntry' => $entry instanceof PoolEntry, 'created' => $f->created];
+            $pool->close();
         });
 
         self::assertTrue($out['isEntry'], 'the pool opens again once the penalty has expired');
@@ -256,6 +265,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException) {
                 $caught = true;
             }
+            $pool->close();
         });
 
         self::assertTrue($caught);
@@ -288,6 +298,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException $e) {
                 $message = $e->getMessage();
             }
+            $pool->close();
         });
 
         self::assertStringContainsString('discarded 4 dead connections', $message);
@@ -307,6 +318,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException $e) {
                 $message = $e->getMessage();
             }
+            $pool->close();
         });
 
         self::assertStringContainsString('no free connection', $message);
@@ -329,6 +341,7 @@ final class ConnectionPoolTest extends TestCase
             } catch (PoolException $e) {
                 $message = $e->getMessage();
             }
+            $pool->close();
         });
 
         self::assertStringContainsString('connect refused', $message, "the driver's own error, not a sizing hint");
@@ -346,6 +359,7 @@ final class ConnectionPoolTest extends TestCase
                 static fn(): float => 1000.0,
             );
             $expiry = $pool->borrow()->expiresAt;
+            $pool->close();
         });
 
         self::assertNotNull($expiry);
@@ -365,6 +379,7 @@ final class ConnectionPoolTest extends TestCase
 
             $b = $pool->borrow();       // the freed slot allows a fresh connection
             $out = ['same' => $a === $b, 'created' => $f->created, 'closed' => $f->closed];
+            $pool->close();
         });
 
         self::assertFalse($out['same'], 'an evicted connection is never handed out again');
@@ -383,6 +398,7 @@ final class ConnectionPoolTest extends TestCase
             $out['held'] = $pool->stats();
             $pool->release($a);
             $out['oneBack'] = $pool->stats();
+            $pool->close();
         });
 
         self::assertSame(['total' => 2, 'idle' => 0, 'active' => 2, 'maximum' => 5], $out['held']);

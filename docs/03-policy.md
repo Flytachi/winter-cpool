@@ -78,21 +78,68 @@ same.
 | Option | Default | Effect |
 |---|---|---|
 | `housekeepingInterval` | `30.0` | How often the sweep runs |
-| `keepaliveTime` | `0.0` | Ping connections idle longer than this (`0` — off) |
-| `idleTimeout` | `0.0` | Close connections idle longer than this (`0` — off) |
+| `keepaliveTime` | `120.0` | Ping connections idle longer than this (`0` — off) |
+| `idleTimeout` | `600.0` | Close connections idle longer than this (`0` — off) |
 | `minimumIdle` | `0` | Never shrink below this many |
 
-`housekeepingEnabled()` is false unless `keepaliveTime` or `idleTimeout` is set, and the timer
-is only armed under Swoole. **With the defaults there is no timer at all** — the pool costs
-nothing when idle.
+**Housekeeping is on by default**, and the two reasons are the same one seen from both ends.
+A pool nobody swept holds its sockets forever — `maxLifetime` is checked when a connection is
+borrowed, and an idle application borrows nothing, so a pool that grew during a burst at
+midnight still holds every socket at dawn. And when the server or a firewall drops those
+sockets meanwhile, the first request back is the one that finds out: it has to probe every
+corpse and reopen before it can do its own work. `keepaliveTime` stops them dying, and
+`idleTimeout` gives them back — neither costs anything a request has to wait for.
 
-Turn on `keepaliveTime` when a firewall or database drops idle connections: a periodic ping
-keeps them from silently dying between requests. Turn on `idleTimeout` when traffic is spiky
-and holding the peak-time pool open all night is wasteful — with `minimumIdle` as the floor so
-the next burst does not start from zero.
+The timer is armed by the **first borrow**, not by constructing the pool, and only under
+Swoole. An application that never opens a connection still pays exactly nothing. One that does
+pays a 30-second tick per pool per worker, plus a ping per idle connection every two minutes.
+
+> A pool that has served a borrow therefore holds a live timer until `close()`, and a live
+> repeating timer keeps the Swoole reactor from draining. Under the framework that is already
+> handled — `workerExit` closes the pools. In a script or a test, close the pool, or
+> `Swoole\Coroutine\run()` will not return.
+
+The sweep probes one connection at a time and returns each to the idle channel before taking
+the next, so borrowers always find the rest waiting: only the single connection in flight is
+out. A pass therefore costs one round trip per connection that is due a ping — five
+connections against a 50 ms server take ~250 ms of background time and nothing of any
+request's time.
+
+Turn `keepaliveTime` off (`0.0`) when connections are cheap and the server is local — a ping
+every two minutes is not free if the pool is large and the link is not. Turn `idleTimeout` off
+when the pool should stay warm between bursts, and then set `minimumIdle` so the next burst
+does not start from zero.
 
 The two are opposites: keepalive keeps connections alive, idle timeout lets them go. Enabling
 both is coherent (keep a warm floor, release the rest) as long as `minimumIdle` is set.
+
+### The ordering rule
+
+```
+keepaliveTime  <  idleTimeout  <  maxLifetime  <  whatever kills idle connections upstream
+```
+
+All three are deadlines on the same connection, and each only means something while the
+connection is still there to receive it:
+
+- **`keepaliveTime ≥ maxLifetime`** — the connection is rotated before the first ping ever
+  reaches it. The pings never happen.
+- **`keepaliveTime ≥ idleTimeout`** (with `minimumIdle: 0`) — the connection is closed before
+  the first ping reaches it. Same outcome. With a warm floor this is fine: the floor
+  connections outlive `idleTimeout`, so keepalive still has work.
+- **`maxLifetime ≥ the server's own idle timeout`** — the thing this is all defending against
+  wins. Postgres `idle_session_timeout`, a Redis `timeout`, a NAT that forgets the flow: the
+  pool has to recycle sooner than they cut, and that upper bound is outside its knowledge.
+  Only the first two are checked in code.
+
+The pool applies the first two itself: an unreachable `keepaliveTime` is dropped to `0.0` when
+the policy is constructed, so `PoolPolicy::$keepaliveTime` always reads as what the housekeeper
+will actually do. A setting that silently does nothing is worse than one that is plainly off —
+the operator believes idle connections are being pinged while they quietly die. HikariCP takes
+the same line, disabling a `keepaliveTime` that reaches `maxLifetime` (and one below 30 s).
+
+For reference, HikariCP's own defaults sit inside this ordering: `keepaliveTime` 2 min,
+`idleTimeout` 10 min, `maxLifetime` 30 min.
 
 ## Related
 

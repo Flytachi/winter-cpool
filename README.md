@@ -131,9 +131,28 @@ Every knob has a default; pass only what you mean to change.
 | `maxLifetimeJitter` | `0.1` | Spreads expiry so a pool does not recycle all at once |
 | `aliveBypassWindow` | `0.5` | Skip the liveness probe for a connection used this recently |
 | `housekeepingInterval` | `30.0` | How often the background sweep runs |
-| `keepaliveTime` | `0.0` | Ping idle connections this often (`0` — off) |
-| `idleTimeout` | `0.0` | Close connections idle longer than this (`0` — off) |
+| `keepaliveTime` | `120.0` | Ping idle connections this often (`0` — off) |
+| `idleTimeout` | `600.0` | Close connections idle longer than this (`0` — off) |
 | `minimumIdle` | `0` | Keep at least this many warm |
+
+Housekeeping is on by default: idle connections are pinged every two minutes so the server or
+a firewall cannot drop them unnoticed, and released after ten idle minutes instead of being
+held until traffic returns. The timer is armed by the first borrow — a pool nobody uses costs
+nothing — and cleared by `close()`, which a long-running server calls on worker exit. In a
+script, close the pool yourself: a live repeating timer keeps the Swoole reactor alive.
+
+The three lifecycle deadlines belong in this order, and it is worth getting right:
+
+```
+keepaliveTime  <  idleTimeout  <  maxLifetime  <  whatever kills idle connections upstream
+```
+
+Each one only matters while the connection is still there to receive it — a keepalive longer
+than `maxLifetime` pings a connection that was already rotated, and one longer than
+`idleTimeout` pings a connection that was already closed. The pool drops an unreachable
+`keepaliveTime` to `0.0` when the policy is built rather than pretending to honour it, so
+`$policy->keepaliveTime` always reads as what will actually happen. See
+[Policy](docs/03-policy.md) for the details and for the upper bound the pool cannot check.
 
 Housekeeping only runs under Swoole, and only when something enables it — a pool with the
 defaults costs no timer.

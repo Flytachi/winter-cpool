@@ -55,8 +55,16 @@ final class CloseOutsideCoroutineTest extends TestCase
     {
         $pool = null;
 
+        // Housekeeping off explicitly: this case is about the drain, and the pool has to
+        // come back out of the coroutine still open. A housekeeping timer — which the
+        // default policy arms on the first borrow — would keep the reactor alive and
+        // `Coroutine\run()` would never return. That is the same property the case below
+        // is about, only there it is the subject rather than an obstacle.
         \Swoole\Coroutine\run(static function () use ($factory, &$pool): void {
-            $pool = new ConnectionPool($factory, new PoolPolicy(maximumPoolSize: 4));
+            $pool = new ConnectionPool(
+                $factory,
+                new PoolPolicy(maximumPoolSize: 4, keepaliveTime: 0.0, idleTimeout: 0.0),
+            );
             $pool->release($pool->borrow());
         });
 

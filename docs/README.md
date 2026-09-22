@@ -35,7 +35,9 @@ Break one of these and the rest stops being true.
 4. **The ceiling is absolute.** `maximumPoolSize` is never exceeded — under pressure borrowers
    queue, and past `connectionTimeout` they get `PoolException::exhausted()`. Turning a limit
    into an outage of the database is worse than turning it into a queue.
-5. **Housekeeping is optional and Swoole-only.** With default policy no timer exists at all.
+5. **Housekeeping is Swoole-only, and armed by use.** The timer starts on the first borrow,
+   never on construction, and `close()` must clear it — a pool nobody borrowed from costs
+   nothing, and a pool that is never closed keeps the reactor alive.
 
 ---
 

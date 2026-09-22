@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed every time; with `10`, the first two did. The loop is now bounded by a deadline, the
   way HikariCP's `getConnection()` is, and carries no attempt counter.
 
+- **A housekeeping pass no longer empties the pool while it runs.** `maintain()` held every
+  connection it had checked aside and pushed them all back at the end, so with a remote
+  server the idle channel drained to nothing for the length of the sweep: measured at 254 ms
+  for five connections against a 50 ms server, with the channel completely empty for the last
+  45 ms. A borrow arriving then found nothing and opened a connection nobody needed. Each
+  connection now goes back as soon as it passes, leaving only the one in flight out of reach.
+
 ### Added
 
 - **Backoff on opening a connection.** After `create()` throws — or hands back a connection
@@ -34,8 +41,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   background connection creator throttles the same way, and there is no useful setting for
   "hammer a failing server harder".
 
+- **The lifecycle ordering is documented and, where it can be, enforced.**
+  `keepaliveTime < idleTimeout < maxLifetime < whatever kills idle connections upstream` —
+  each deadline only means something while the connection is still there to receive it.
+  `PoolPolicy` now drops a `keepaliveTime` that reaches `maxLifetime`, or that reaches
+  `idleTimeout` with no warm floor to survive it, to `0.0` at construction: the pings could
+  never have happened, and a setting that silently does nothing is worse than one that is
+  plainly off. `PoolPolicy::$keepaliveTime` therefore always reads as what the housekeeper
+  will actually do. HikariCP takes the same line. The upper bound — the server's own idle
+  timeout — stays outside what the pool can check, and is documented instead.
+
 ### Changed
 
+- **Housekeeping is on by default**: `keepaliveTime` `0.0 → 120.0`, `idleTimeout`
+  `0.0 → 600.0`. `minimumIdle` stays `0`. These are HikariCP's numbers, and they satisfy the
+  ordering above; the one deliberate divergence is the warm floor, which HikariCP defaults to
+  `maximumPoolSize` (a fixed-size pool) — here a floor would multiply by worker count instead
+  of living once per JVM. Two things change for the better: a pool no longer holds its sockets
+  indefinitely (`maxLifetime` is only consulted on borrow, and an idle application borrows
+  nothing, so a pool grown during a midnight burst still held every socket at dawn), and the
+  first request after a pause no longer has to bury the connections the server dropped
+  meanwhile. **A pool that has served a borrow now holds a repeating timer until `close()`,
+  and a live timer keeps the Swoole reactor from draining** — the framework already closes
+  pools on worker exit, but a script or test that creates a pool must close it or
+  `Swoole\Coroutine\run()` will not return.
 - **`connectionTimeout` now bounds the whole borrow**, not each wait inside it. Waiting for a
   free connection, retiring dead ones and opening their replacements share one budget, and
   `acquire()` waits only for what is left of it. Previously a borrow at the ceiling could wait
@@ -52,14 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-No application change is required to pick this up: the defaults are untouched and the public
-surface is the same apart from the named constructor above. What changes is behaviour on the
-first request after an idle period — where the pool used to throw, it now retires the dead
-connections and opens a live one, costing that request a single reconnect.
+No code change is required to pick this up — the public surface is the same apart from the
+named constructor above — but the behaviour does change in two places worth knowing about.
+The first request after an idle period now retires the dead connections and opens a live one
+where it used to throw, costing that request a single reconnect; and a pool that has served a
+borrow now runs a background sweep until it is closed. Applications that had tuned
+`keepaliveTime` / `idleTimeout` themselves are unaffected: an explicit value always wins.
 
-Covered by six new tests in `tests/Unit/ConnectionPoolTest.php`: the idle-pool regression, the
-opening penalty and its expiry, and one per failure diagnosis (`exhausted` / `connectFailed` /
-`unusable`) — the last three branches had no coverage at all before.
+The suite grew from 32 tests to 44. The new ones cover the idle-pool regression, the opening
+penalty and its expiry, one per failure diagnosis (`exhausted` / `connectFailed` / `unusable`
+— all three branches previously had no coverage at all), the ordering rule, the new defaults,
+and that a sweep leaves the pool borrowable throughout.
 
 ## [1.0.0] - 2026-08-19
 

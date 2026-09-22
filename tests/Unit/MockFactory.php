@@ -20,6 +20,14 @@ final class MockFactory implements ConnectionFactory
     public bool $alive = true;
     public bool $failCreate = false;
 
+    /**
+     * Called from inside `validate()`, so a test can look at the pool at the one moment
+     * a probe is in flight — which against a real server is a round trip long.
+     *
+     * @var (callable(): void)|null
+     */
+    public $whileProbing = null;
+
     public function create(): object
     {
         if ($this->failCreate) {
@@ -32,6 +40,9 @@ final class MockFactory implements ConnectionFactory
     public function validate(object $connection): bool
     {
         ++$this->validated;
+        if ($this->whileProbing !== null) {
+            ($this->whileProbing)();
+        }
         return $this->alive;
     }
 
