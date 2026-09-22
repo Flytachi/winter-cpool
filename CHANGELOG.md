@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-22
+
 ### Fixed
 
 - **`borrow()` no longer gives up on a pool full of dead connections.** The retire loop was
@@ -132,5 +134,6 @@ were.
 `SingleConnection`, which is the correct shape when a process serves one unit of work at
 a time; the calling code does not branch.
 
-[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.1.0
 [1.0.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.0.0
