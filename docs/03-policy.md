@@ -13,11 +13,17 @@ PoolPolicy::default();     // all defaults
 | Option | Default | Effect |
 |---|---|---|
 | `maximumPoolSize` | `10` | Hard ceiling on open connections |
-| `connectionTimeout` | `15.0` | How long a borrower waits before `exhausted()` |
+| `connectionTimeout` | `15.0` | Deadline for a whole borrow |
 
 These two are one decision, not two. The ceiling converts "too many connections" from a
 database-side outage into an application-side queue; the timeout decides how long that queue is
 allowed to grow before the request gives up.
+
+`connectionTimeout` bounds the **borrow**, not each wait inside it. Waiting for a free
+connection, retiring dead ones and opening their replacements all come out of the same budget,
+and when it runs out the borrow throws — `unusable()` if it was burying dead connections,
+`exhausted()` if everything was merely busy. Until this was a deadline the loop could spend
+`connectionTimeout` up to four separate times, so the documented bound was not one.
 
 Sizing rule of thumb: the ceiling is a property of **the database**, divided by the number of
 workers that talk to it. Four Swoole workers against a Postgres with `max_connections = 100`,
@@ -53,6 +59,19 @@ Set it to `0.0` to probe on every borrow — correct, and it doubles the round t
 service. Raise it and a broken socket lives slightly longer before being noticed. The default
 assumes a connection that answered half a second ago is still alive, which is true unless the
 database went down in that window — in which case the query fails and the caller evicts.
+
+## Opening after a failure
+
+Not a knob — the pool decides this one on its own. When opening a connection fails, or the
+connection opens and then cannot answer, opening is held shut for 10 ms; each consecutive
+failure doubles the wait up to 5 s, and the first connection that opens and answers clears it.
+
+It is deliberately not configurable: there is no value of "hammer a failing server harder"
+worth exposing. The numbers are HikariCP's, whose background connection creator throttles
+exactly this way. What it buys is visible when a server accepts sockets but does not serve on
+them — a database still starting, a cache still loading its dataset: without the penalty a
+single borrow opened 10 038 sockets in five milliseconds, and every concurrent request did the
+same.
 
 ## Housekeeping
 

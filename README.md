@@ -75,7 +75,7 @@ use Flytachi\Winter\CPool\{ConnectionPool, PoolPolicy};
 
 $pool = new ConnectionPool(new PdoFactory($dsn), new PoolPolicy(maximumPoolSize: 10));
 
-$entry = $pool->borrow();               // waits for a free slot, up to connectionTimeout
+$entry = $pool->borrow();               // a live connection, or throws within connectionTimeout
 try {
     /** @var PDO $pdo */
     $pdo = $entry->resource;
@@ -93,6 +93,12 @@ coroutine `defer`).
 When every connection is busy and the pool is at its ceiling, `borrow()` waits. Past
 `connectionTimeout` it throws `PoolException::exhausted()` rather than opening connection
 number 10 001 — an exhausted pool is a queue, not an outage of the database.
+
+`connectionTimeout` is the deadline for the whole borrow, not for each wait inside it. A pool
+that sat idle while the server dropped its sockets holds only dead connections: the borrow
+discards them one after another and opens a fresh one, and all of that comes out of the same
+budget. The first request after a long pause therefore pays for one reconnect and succeeds —
+it does not fail because the corpses used up a retry counter.
 
 ### Outside a coroutine
 
@@ -120,7 +126,7 @@ Every knob has a default; pass only what you mean to change.
 | Option | Default | What it does |
 |---|---|---|
 | `maximumPoolSize` | `10` | Ceiling on open connections. Beyond it, borrowers queue |
-| `connectionTimeout` | `15.0` | How long a borrower waits before `exhausted()` |
+| `connectionTimeout` | `15.0` | Deadline for a whole borrow — waiting, retiring and reopening |
 | `maxLifetime` | `1800.0` | A connection older than this is retired on return |
 | `maxLifetimeJitter` | `0.1` | Spreads expiry so a pool does not recycle all at once |
 | `aliveBypassWindow` | `0.5` | Skip the liveness probe for a connection used this recently |

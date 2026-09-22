@@ -45,6 +45,9 @@ Break one of these and the rest stops being true.
   pool cannot detect it; look for a `borrow()` without `finally`.
 - **"Why did a working connection get closed?"** → `maxLifetime`, plus jitter. See
   [Policy](03-policy.md).
+- **"The first request after a quiet period fails"** → the pool was holding sockets the server
+  had dropped. It buries them and reopens inside `connectionTimeout`; if it still throws, read
+  *which* exception — see [Model](01-model.md).
 - **"Nothing is pooled at all"** → no active Swoole runtime, so `SingleConnection` is in play.
   See [Runtimes](04-runtimes.md).
 - **"The pool survives a fork wrongly"** → `abandon()` vs `close()`, same page.

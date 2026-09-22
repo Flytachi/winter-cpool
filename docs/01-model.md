@@ -23,30 +23,60 @@ one waiter.
 ```
 borrow()
   ├─ ensureHousekeeper()          arm the sweep timer if the policy asks for one
-  └─ loop (bounded by MAX_RETIRE_LOOPS)
-       ├─ acquire()               idle entry → else create if under ceiling → else wait
-       │    └─ nothing within connectionTimeout → PoolException::exhausted()
-       ├─ expired? or probe failed? → discard, try again
+  └─ loop until the deadline      deadline = now + connectionTimeout
+       ├─ acquire()               idle entry → else open one (unless penalised) → else wait
+       │    └─ nothing came free in what is left of the budget → PoolException
+       ├─ expired? or probe failed? → discard, count it, go round again
+       │    └─ and if this borrow is what opened it → penalise opening
        └─ stamp lastUsedAt, return the entry
 ```
 
-Two details worth internalising:
+Three details worth internalising:
 
 **Creating is preferred over waiting.** `acquire()` only waits on the channel once the pool is
 at `maximumPoolSize`. Below the ceiling a borrower opens a new connection rather than queueing
 behind someone else's.
 
-**The retire loop is bounded.** Each failed probe discards the entry and tries again; after
-`MAX_RETIRE_LOOPS` attempts the pool gives up with `PoolException::unusable()`. That is a
-different diagnosis from `exhausted()`: *unusable* says the connections themselves are bad,
-*exhausted* says they are all busy.
+**The loop is bounded by time, not by tries.** `connectionTimeout` is the deadline for the
+whole borrow — every wait inside it gets only what is left. Discarding a dead entry is not a
+failed attempt; it is the work. A pool that sat idle while the server (or a firewall) dropped
+its sockets holds nothing but corpses, and burying five of them before opening a live
+connection is a correct borrow, not a broken one.
 
-In practice `unusable()` is hard to reach, and understanding why explains the probe rule.
-Below the ceiling a discarded entry is replaced by a **freshly created** one — and a fresh
-entry has `lastUsedAt = now`, so `needsProbe()` is false and it is handed out without
-validation. Measured: `create=1, probe=0` on the first borrow. So a dead database usually
-surfaces as a failed query on a new connection, not as `unusable()`; that exception belongs to
-a pool sitting at its ceiling whose idle entries keep failing.
+> This is where the pool used to be wrong. The retire loop was bounded by a fixed budget of
+> four tries, on the reasoning that a discarded entry is replaced by a freshly created one so
+> the budget would never run out. It does not hold: `acquire()` prefers the idle channel over
+> creating, so while corpses remain it keeps drawing corpses. A pool of four or more dead
+> connections therefore failed the borrow *one step short* of the fresh connection that was
+> about to succeed — reliably, on the first request after any idle period long enough for the
+> sockets to die. HikariCP bounds the same loop by its `connectionTimeout` and carries no
+> attempt counter; so does this pool now.
+
+**Opening is penalised after it fails.** When `create()` throws — or succeeds and hands back a
+connection that cannot answer — opening is held shut for a doubling interval (10 ms, then
+20, 40 … up to 5 s), cleared by the first connection that opens and answers. A server that
+takes sockets but does not serve on them (PostgreSQL still starting, Redis still loading its
+dataset) would otherwise be met with a fresh socket per loop iteration per request: measured
+at 10 038 opens in five milliseconds before this existed. The penalty is pool-wide, not
+per-borrow, because a per-borrow budget still lets every concurrent request open its own.
+
+HikariCP solves this by never opening a connection on the borrower's thread at all — creation
+belongs to a background executor with exactly this backoff. That shape needs a permanently
+warm pool, which is the wrong trade here: `minimumIdle` defaults to `0`, and under Swoole a
+warm pool multiplies by `worker_num`. So the borrower still opens its own connection, and the
+throttle is what came across.
+
+## Which exception means what
+
+| Exception | Meaning | Typical cause |
+|---|---|---|
+| `exhausted()` | every connection is busy | the pool is too small, or a borrow is missing its `release()` |
+| `connectFailed()` | the connection could not be opened, carrying the driver's own message | server down, DNS, credentials, TLS |
+| `unusable()` | the window was spent on connections that would not answer | the server is reachable but not serving, or sockets die faster than they can be replaced |
+
+The three are deliberately distinct: "all busy" and "all broken" call for opposite reactions,
+and an operator told to raise `maximumPoolSize` while the database refuses to serve is being
+sent the wrong way.
 
 ## What `release()` does
 
