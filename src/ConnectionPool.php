@@ -130,10 +130,14 @@ final class ConnectionPool
         throw $this->unavailable($retired);
     }
 
-    /** Returns a borrowed connection to the pool for reuse. */
+    /**
+     * Returns a borrowed connection to the pool for reuse — after a
+     * {@see ResettableConnectionFactory} has cleaned it; one that cannot be cleaned is
+     * retired instead, so no borrower inherits another's session state.
+     */
     public function release(PoolEntry $entry): void
     {
-        if ($this->idle === null) {
+        if ($this->idle === null || !$this->resetState($entry)) {
             $this->discard($entry);
             return;
         }
@@ -441,6 +445,19 @@ final class ConnectionPool
     private function needsProbe(PoolEntry $entry): bool
     {
         return ($this->now() - $entry->lastUsedAt) > $this->policy->aliveBypassWindow;
+    }
+
+    /** `false` when the connection could not be cleaned (or reset threw) — retire it. */
+    private function resetState(PoolEntry $entry): bool
+    {
+        if (!$this->factory instanceof ResettableConnectionFactory) {
+            return true;
+        }
+        try {
+            return $this->factory->reset($entry->resource);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function probe(PoolEntry $entry): bool

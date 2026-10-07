@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-07
+
+### Added
+
+- **`ResettableConnectionFactory` — a connection is cleaned before it goes back to the pool.**
+  An adapter that implements it gets `reset()` called on every `release()`: `true` returns the
+  connection to the idle set, `false` (or a throw) retires it. HikariCP's
+  `resetConnectionState`. Without it a connection returned mid-transaction handed that
+  transaction to the next borrower — its writes landed inside it and were lost with it, and
+  its own `beginTransaction()` failed with "already active"; the liveness probe could not
+  notice, since `SELECT 1` answers fine inside an open transaction. A separate interface
+  rather than a fourth method of `ConnectionFactory`, so existing adapters need no change.
+  `evict()` does not reset: a dead connection is closed, not cleaned.
+
 ## [1.1.0] - 2026-09-22
 
 ### Fixed
@@ -134,6 +148,7 @@ were.
 `SingleConnection`, which is the correct shape when a process serves one unit of work at
 a time; the calling code does not branch.
 
-[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.2.0
 [1.1.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.1.0
 [1.0.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.0.0
