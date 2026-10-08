@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-08
+
+### Fixed
+
+- **A pool closed while a returned connection was being reset no longer fails the return.**
+  `release()` checked that the pool was open before calling `ResettableConnectionFactory::reset()`
+  and pushed the connection back after it. A reset that talks to the server — a rollback, a
+  `DISCARD` — yields the coroutine, and a pool closed in the meantime (a worker shutting down)
+  had no idle channel left: the return died with "Call to a member function push() on null"
+  inside the coroutine's defer, and the connection was never closed. The pool is now checked
+  again after the reset; a connection returned to a closed pool is closed.
+
 ## [1.2.0] - 2026-10-07
 
 ### Added
@@ -148,7 +160,8 @@ were.
 `SingleConnection`, which is the correct shape when a process serves one unit of work at
 a time; the calling code does not branch.
 
-[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/flytachi/winter-cpool/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/flytachi/winter-cpool/releases/tag/v1.2.1
 [1.2.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.2.0
 [1.1.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.1.0
 [1.0.0]: https://github.com/flytachi/winter-cpool/releases/tag/v1.0.0

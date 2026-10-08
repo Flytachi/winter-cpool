@@ -89,4 +89,31 @@ final class ConnectionResetTest extends TestCase
 
         self::assertSame(0, $f->reset, 'a dead connection is closed, not cleaned');
     }
+
+    public function test_a_pool_closed_while_a_reset_is_in_flight_takes_the_connection_down_with_it(): void
+    {
+        // A reset that is a round trip yields the coroutine. If the pool is closed in the
+        // meantime — a worker shutting down — the connection must be closed, not pushed
+        // into a pool that no longer exists.
+        $f = new ResettingMockFactory();
+        $out = [];
+        \Swoole\Coroutine\run(function () use ($f, &$out): void {
+            $pool = new ConnectionPool($f);
+            $entry = $pool->borrow();
+            $f->whileResetting = static function () use ($pool): void {
+                \Swoole\Coroutine::create(static fn() => $pool->close());
+                \Swoole\Coroutine::sleep(0.01);
+            };
+            try {
+                $pool->release($entry);
+                $out['released'] = true;
+            } catch (\Throwable $e) {
+                $out['error'] = $e->getMessage();
+            }
+            $out['closed'] = $f->closed;
+        });
+
+        self::assertArrayNotHasKey('error', $out, $out['error'] ?? '');
+        self::assertSame(1, $out['closed'], 'the connection is closed, not leaked');
+    }
 }

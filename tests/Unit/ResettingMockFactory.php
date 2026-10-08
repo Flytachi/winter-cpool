@@ -20,6 +20,14 @@ final class ResettingMockFactory implements ResettableConnectionFactory
     public bool $clean = true;
     public bool $resetThrows = false;
 
+    /**
+     * Called from inside `reset()`, so a test can act at the moment a real reset would
+     * be waiting on the server — a rollback or a DISCARD is a round trip.
+     *
+     * @var (callable(): void)|null
+     */
+    public $whileResetting = null;
+
     public function create(): object
     {
         ++$this->created;
@@ -39,6 +47,9 @@ final class ResettingMockFactory implements ResettableConnectionFactory
     public function reset(object $connection): bool
     {
         ++$this->reset;
+        if ($this->whileResetting !== null) {
+            ($this->whileResetting)();
+        }
         if ($this->resetThrows) {
             throw new \RuntimeException('reset failed');
         }

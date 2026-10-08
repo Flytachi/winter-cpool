@@ -137,7 +137,9 @@ final class ConnectionPool
      */
     public function release(PoolEntry $entry): void
     {
-        if ($this->idle === null || !$this->resetState($entry)) {
+        // The pool is checked again after the reset: a reset that talks to the server
+        // yields the coroutine, and the pool may have been closed meanwhile.
+        if ($this->idle === null || !$this->resetState($entry) || $this->idle === null) {
             $this->discard($entry);
             return;
         }
