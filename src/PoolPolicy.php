@@ -32,6 +32,9 @@ final readonly class PoolPolicy
      */
     public float $keepaliveTime;
 
+    /** Seconds a probe may take; `0` = no limit. See the constructor. */
+    public float $validationTimeout;
+
     /**
      * @param int $maximumPoolSize Upper bound on connections held per pool.
      * @param float $connectionTimeout Seconds to wait for a free connection before
@@ -56,6 +59,11 @@ final readonly class PoolPolicy
      * @param int $minimumIdle Warm floor the housekeeper maintains — it reopens
      *   connections up to this count and never shrinks below it. `0` = fully lazy
      *   (HikariCP `minimumIdle`). Swoole only.
+     * @param float $validationTimeout Seconds a liveness probe may take before the
+     *   connection is taken for dead (HikariCP `validationTimeout`). A socket dropped in
+     *   silence — a NAT, a firewall, a laptop that slept — leaves a probe waiting minutes
+     *   for an answer that never comes; past this, neither a borrow nor the housekeeper
+     *   waits for it. `0` = wait as long as the probe takes. Inside a coroutine only.
      */
     public function __construct(
         public int $maximumPoolSize = 10,
@@ -67,7 +75,9 @@ final readonly class PoolPolicy
         float $keepaliveTime = 120.0,
         public float $idleTimeout = 600.0,
         public int $minimumIdle = 0,
+        float $validationTimeout = 3.0,
     ) {
+        $this->validationTimeout = max(0.0, $validationTimeout);
         $this->keepaliveTime = self::reachableKeepalive(
             $keepaliveTime,
             $maxLifetime,

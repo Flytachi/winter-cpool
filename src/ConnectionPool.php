@@ -62,6 +62,15 @@ final class ConnectionPool
     /** Swoole timer id of the background housekeeper, or null when not armed. */
     private ?int $timerId = null;
 
+    /**
+     * Connections whose probe did not answer in time. Out of the pool already; the probe,
+     * still waiting on them, closes each when it returns — closing it under the probe
+     * would pull the connection from a coroutine still using it.
+     *
+     * @var \WeakMap<PoolEntry, true>
+     */
+    private \WeakMap $abandoned;
+
     /** @var Closure(): float Monotonic seconds source (test seam). */
     private readonly Closure $clock;
 
@@ -77,6 +86,7 @@ final class ConnectionPool
         ?Closure $clock = null,
     ) {
         $this->clock = $clock ?? static fn(): float => hrtime(true) / 1e9;
+        $this->abandoned = new \WeakMap();
         $this->idle  = new Channel($this->policy->maximumPoolSize);
     }
 
@@ -433,7 +443,11 @@ final class ConnectionPool
 
     private function discard(PoolEntry $entry): void
     {
-        $this->safeClose($entry->resource);
+        if (isset($this->abandoned[$entry])) {
+            unset($this->abandoned[$entry]);    // its probe closes it when it returns
+        } else {
+            $this->safeClose($entry->resource);
+        }
         if ($this->total > 0) {
             --$this->total;
         }
@@ -462,7 +476,43 @@ final class ConnectionPool
         }
     }
 
+    /**
+     * Whether the connection answers — within {@see PoolPolicy::$validationTimeout}.
+     *
+     * The probe runs in a coroutine of its own and is waited for that long. A connection
+     * whose socket was dropped in silence does not answer for minutes, and nothing in PHP
+     * interrupts a driver waiting on it: neither `Coroutine::cancel()` nor Swoole's socket
+     * timeouts reach a `pdo_pgsql` query (both checked against a live server). So it is
+     * not interrupted but left: the connection is dead to the pool at once, and the probe
+     * closes it whenever its answer — or the operating system's verdict — finally comes.
+     */
     private function probe(PoolEntry $entry): bool
+    {
+        $timeout = $this->policy->validationTimeout;
+        if ($timeout <= 0.0 || Coroutine::getCid() < 0) {
+            return $this->answers($entry);
+        }
+        $answer = new Channel(1);
+        $state = new \stdClass();
+        $state->late = false;
+        Coroutine::create(function () use ($entry, $answer, $state): void {
+            $alive = $this->answers($entry);
+            if ($state->late) {
+                $this->safeClose($entry->resource);
+                return;
+            }
+            $answer->push($alive);
+        });
+        $alive = $answer->pop($timeout);
+        if ($alive === false && $answer->errCode === SWOOLE_CHANNEL_TIMEOUT) {
+            $state->late = true;
+            $this->abandoned[$entry] = true;
+            return false;
+        }
+        return $alive === true;
+    }
+
+    private function answers(PoolEntry $entry): bool
     {
         try {
             return $this->factory->validate($entry->resource);

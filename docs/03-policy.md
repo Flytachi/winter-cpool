@@ -54,11 +54,22 @@ minutes spreads that over three minutes.
 | Option | Default | Effect |
 |---|---|---|
 | `aliveBypassWindow` | `0.5` | Skip validation for a connection used this recently |
+| `validationTimeout` | `3.0` | Take a connection for dead when its probe has not answered in this long (`0` — no limit) |
 
 Set it to `0.0` to probe on every borrow — correct, and it doubles the round trips of a busy
 service. Raise it and a broken socket lives slightly longer before being noticed. The default
 assumes a connection that answered half a second ago is still alive, which is true unless the
 database went down in that window — in which case the query fails and the caller evicts.
+
+A probe that never answers is the case `validationTimeout` exists for. A socket dropped in
+silence — a NAT or a firewall that forgot it, a laptop that slept — gets no reset, so a probe
+written into it waits until the operating system gives up: minutes. Nothing in PHP interrupts
+a driver waiting there — neither `Coroutine::cancel()` nor Swoole's socket timeouts reach a
+`pdo_pgsql` query — so the probe runs in a coroutine of its own and is waited for this long.
+Past it the connection is dead to the pool: a borrow opens a fresh one, the housekeeper moves
+on, and the probe closes the connection whenever its answer finally comes. Inside a coroutine
+only; outside one the probe is waited for as it is. To end the wait itself, the driver needs
+a network timeout of its own — for PostgreSQL, `tcp_user_timeout` in the connection string.
 
 ## Opening after a failure
 

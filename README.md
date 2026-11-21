@@ -130,6 +130,7 @@ Every knob has a default; pass only what you mean to change.
 | `maxLifetime` | `1800.0` | A connection older than this is retired on return |
 | `maxLifetimeJitter` | `0.1` | Spreads expiry so a pool does not recycle all at once |
 | `aliveBypassWindow` | `0.5` | Skip the liveness probe for a connection used this recently |
+| `validationTimeout` | `3.0` | Take a connection for dead when its probe has not answered in this long (`0` — no limit) |
 | `housekeepingInterval` | `30.0` | How often the background sweep runs |
 | `keepaliveTime` | `120.0` | Ping idle connections this often (`0` — off) |
 | `idleTimeout` | `600.0` | Close connections idle longer than this (`0` — off) |

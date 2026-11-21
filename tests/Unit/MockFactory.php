@@ -28,6 +28,9 @@ final class MockFactory implements ConnectionFactory
      */
     public $whileProbing = null;
 
+    /** Seconds a probe takes to answer — a server gone silent mid-connection. */
+    public float $probeTakes = 0.0;
+
     public function create(): object
     {
         if ($this->failCreate) {
@@ -42,6 +45,9 @@ final class MockFactory implements ConnectionFactory
         ++$this->validated;
         if ($this->whileProbing !== null) {
             ($this->whileProbing)();
+        }
+        if ($this->probeTakes > 0.0) {
+            \Swoole\Coroutine::sleep($this->probeTakes);
         }
         return $this->alive;
     }

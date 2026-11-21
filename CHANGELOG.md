@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-21
+
+### Added
+
+- **`PoolPolicy::$validationTimeout` — a probe that does not answer is not waited for**
+  (default `3.0` s, `0` — no limit; HikariCP `validationTimeout`). A socket dropped in
+  silence — a NAT or a firewall that forgot it, a laptop that slept — gets no reset, and a
+  probe written into it waited until the operating system gave up: a borrow hung for half a
+  minute and the request behind it failed, and the housekeeper, stuck on it, held a worker's
+  stop for its whole `max_wait_time`. Nothing in PHP interrupts a driver waiting there —
+  checked against a live PostgreSQL: neither `Coroutine::cancel()` nor Swoole's socket
+  timeouts reach a `pdo_pgsql` query. So the probe runs in a coroutine of its own and is
+  waited for `validationTimeout`; past it the connection is dead to the pool — a borrow opens
+  a fresh one, the housekeeper moves on — and the probe closes it when its answer finally
+  comes, never under it. Inside a coroutine only. The wait itself ends with the driver's own
+  network timeout (PostgreSQL: `tcp_user_timeout`).
+
 ## [1.2.1] - 2026-10-08
 
 ### Fixed
